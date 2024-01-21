@@ -3,6 +3,7 @@ package ma.fstt.microserviceclient.controllers;
 
 import ma.fstt.microserviceclient.entities.Client;
 import ma.fstt.microserviceclient.payload.request.AddClientRequest;
+import ma.fstt.microserviceclient.payload.request.UpdateClientRequest;
 import ma.fstt.microserviceclient.payload.response.MessageResponse;
 
 import ma.fstt.microserviceclient.repository.ClientRepository;
@@ -11,8 +12,11 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.*;
 
+import java.text.SimpleDateFormat;
+import java.util.Date;
 import java.util.List;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
 
 @RestController
@@ -25,6 +29,10 @@ public class ClientController {
     @Autowired
     public ClientRepository clientRepository;
 
+    public String encodeDate(Date date) {
+        SimpleDateFormat sdf = new SimpleDateFormat("MM/dd/yyyy");
+        return encoder.encode(sdf.format(date));
+    }
     @PostMapping("/add")
     public ResponseEntity<MessageResponse> addClient(@RequestBody AddClientRequest addClientRequest) {
         try {
@@ -32,7 +40,7 @@ public class ClientController {
                     addClientRequest.getL_name(),
                     addClientRequest.getF_name(),
                     addClientRequest.getL_name()+"_"+addClientRequest.getF_name(),
-                    encoder.encode(addClientRequest.getDate_of_birth().toString()),
+                    encodeDate(addClientRequest.getDate_of_birth()),
                     addClientRequest.getEmail(),
                     addClientRequest.getPhone(),
                     addClientRequest.getCity(),
@@ -54,18 +62,24 @@ public class ClientController {
     public ResponseEntity<List<Client>> getAllClients() {
         try {
             List<Client> clients = clientRepository.findAll();
-            return ResponseEntity.ok(clients);
+            List<Client> filteredClients = clients.stream()
+                    .filter(client -> hasRole(client, "ROLE_CLIENT"))
+                    .collect(Collectors.toList());
+
+            return ResponseEntity.ok(filteredClients);
         } catch (Exception e) {
             return ResponseEntity.status(500).build(); // Erreur interne du serveur
         }
     }
-
+    private boolean hasRole(Client client, String role) {
+        return client.getRole().equals(role);
+    }
 
     @GetMapping("/{clientId}")
     public ResponseEntity<Client> getClientById(@PathVariable String clientId) {
         try {
             Optional<Client> client = clientRepository.findById(clientId);
-            if (client.isPresent()) {
+            if (client.isPresent() && hasRole(client.get(), "ROLE_CLIENT")) {
                 return ResponseEntity.ok(client.get());
             } else {
                 return ResponseEntity.status(404).build(); // Ressource non trouvée
@@ -93,4 +107,38 @@ public class ClientController {
             return ResponseEntity.status(500).body(new MessageResponse(500, "Internal server error"));
         }
     }
+
+    //update client
+    @PutMapping("/{clientId}")
+    public ResponseEntity<MessageResponse> updateClient(
+            @PathVariable String clientId,
+            @RequestBody UpdateClientRequest updatedClientRequest
+    ) {
+        try {
+            Optional<Client> optionalClient = clientRepository.findById(clientId);
+            if (optionalClient.isPresent()) {
+                Client client = optionalClient.get();
+
+                // Mettre à jour tous les champs de l'employé
+                client.setL_name(updatedClientRequest.getL_name());
+                client.setF_name(updatedClientRequest.getF_name());
+                client.setUsername(updatedClientRequest.getUsername());
+                client.setEmail(updatedClientRequest.getEmail());
+                client.setPhone(updatedClientRequest.getPhone());
+                client.setCity(updatedClientRequest.getCity());
+                client.setAddress(updatedClientRequest.getAddress());
+                client.setCin(updatedClientRequest.getCin());
+                client.setDate_of_birth(updatedClientRequest.getDate_of_birth());
+                client.setAdd_wallet_cli(updatedClientRequest.getAdd_wallet_cli());
+
+                clientRepository.save(client);
+                return ResponseEntity.ok(new MessageResponse(200, "Client updated successfully"));
+            } else {
+                return ResponseEntity.status(404).body(new MessageResponse(404, "Client not found"));
+            }
+        } catch (Exception e) {
+            return ResponseEntity.status(500).body(new MessageResponse(500, "Internal server error"));
+        }
+    }
+
 }
