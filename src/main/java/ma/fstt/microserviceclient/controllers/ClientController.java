@@ -8,6 +8,7 @@ import ma.fstt.microserviceclient.payload.response.MessageResponse;
 
 import ma.fstt.microserviceclient.repository.ClientRepository;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.*;
@@ -29,13 +30,24 @@ public class ClientController {
     @Autowired
     public ClientRepository clientRepository;
 
+    private final AuthService authService;
+    public ClientController(ClientRepository clientRepository, AuthService authService) {
+        this.clientRepository = clientRepository;
+        this.authService = authService;
+    }
+
     public String encodeDate(Date date) {
         SimpleDateFormat sdf = new SimpleDateFormat("MM/dd/yyyy");
         return encoder.encode(sdf.format(date));
     }
     @PostMapping("/add")
-    public ResponseEntity<MessageResponse> addClient(@RequestBody AddClientRequest addClientRequest) {
+    public ResponseEntity<MessageResponse> addClient(@RequestBody AddClientRequest addClientRequest,@RequestHeader("Authorization") String authorizationHeader) {
         try {
+            // Extract the token from the Authorization header
+            String token = extractTokenFromHeader(authorizationHeader);
+            if (!authService.isValidEmployeeToken(token)) {
+                return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(new MessageResponse(401, "Not authorized"));
+            }
             Client client = new Client(
                     addClientRequest.getL_name(),
                     addClientRequest.getF_name(),
@@ -59,8 +71,13 @@ public class ClientController {
         }
     }
     @GetMapping("/getAll")
-    public ResponseEntity<List<Client>> getAllClients() {
+    public ResponseEntity<Object> getAllClients(@RequestHeader("Authorization") String authorizationHeader) {
         try {
+            // Extract the token from the Authorization header
+            String token = extractTokenFromHeader(authorizationHeader);
+            if (!authService.isValidEmployeeToken(token)) {
+                return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(new MessageResponse(401, "Not authorized"));
+            }
             List<Client> clients = clientRepository.findAll();
             List<Client> filteredClients = clients.stream()
                     .filter(client -> hasRole(client, "ROLE_CLIENT"))
@@ -76,8 +93,13 @@ public class ClientController {
     }
 
     @GetMapping("/{clientId}")
-    public ResponseEntity<Client> getClientById(@PathVariable String clientId) {
+    public ResponseEntity<Object> getClientById(@PathVariable String clientId,@RequestHeader("Authorization") String authorizationHeader) {
         try {
+            // Extract the token from the Authorization header
+            String token = extractTokenFromHeader(authorizationHeader);
+            if (!authService.isValidEmployeeToken(token)) {
+                return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(new MessageResponse(401, "Not authorized"));
+            }
             Optional<Client> client = clientRepository.findById(clientId);
             if (client.isPresent() && hasRole(client.get(), "ROLE_CLIENT")) {
                 return ResponseEntity.ok(client.get());
@@ -94,8 +116,13 @@ public class ClientController {
 
 
     @DeleteMapping("/{clientId}")
-    public ResponseEntity<MessageResponse> deleteClient(@PathVariable String clientId) {
+    public ResponseEntity<MessageResponse> deleteClient(@PathVariable String clientId,@RequestHeader("Authorization") String authorizationHeader) {
         try {
+            // Extract the token from the Authorization header
+            String token = extractTokenFromHeader(authorizationHeader);
+            if (!authService.isValidEmployeeToken(token)) {
+                return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(new MessageResponse(401, "Not authorized"));
+            }
             Optional<Client> client = clientRepository.findById(clientId);
             if (client.isPresent()) {
                 clientRepository.delete(client.get());
@@ -112,9 +139,15 @@ public class ClientController {
     @PutMapping("/{clientId}")
     public ResponseEntity<MessageResponse> updateClient(
             @PathVariable String clientId,
-            @RequestBody UpdateClientRequest updatedClientRequest
+            @RequestBody UpdateClientRequest updatedClientRequest,
+            @RequestHeader("Authorization") String authorizationHeader
     ) {
         try {
+            // Extract the token from the Authorization header
+            String token = extractTokenFromHeader(authorizationHeader);
+            if (!authService.isValidEmployeeToken(token)) {
+                return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(new MessageResponse(401, "Not authorized"));
+            }
             Optional<Client> optionalClient = clientRepository.findById(clientId);
             if (optionalClient.isPresent()) {
                 Client client = optionalClient.get();
@@ -140,5 +173,14 @@ public class ClientController {
             return ResponseEntity.status(500).body(new MessageResponse(500, "Internal server error"));
         }
     }
+
+    private String extractTokenFromHeader(String authorizationHeader) {
+        if (authorizationHeader != null && authorizationHeader.startsWith("Bearer ")) {
+            return authorizationHeader.substring(7);
+        }
+        return null;
+    }
+
+
 
 }
