@@ -66,7 +66,7 @@ stage('reload docker images') {
             }
 
             // Run Docker Compose
-            sh "ssh -i ${JENKINS_SSH_KEY} -o StrictHostKeyChecking=no ${REMOTE_USER}@${REMOTE_HOST} 'cd ${REMOTE_PATH} && docker run --rm -d -v /var/run/docker.sock:/var/run/docker.sock -v \"/home/mohcineboudenjal/smartassurance/prod:/home/mohcineboudenjal/smartassurance/prod\" -w=\"/home/mohcineboudenjal/smartassurance/prod\" docker/compose:1.25.5 up'"
+            sh "ssh -i ${JENKINS_SSH_KEY} -o StrictHostKeyChecking=no ${REMOTE_USER}@${REMOTE_HOST} 'cd ${REMOTE_PATH} && docker run --rm -v /var/run/docker.sock:/var/run/docker.sock -v \"/home/mohcineboudenjal/smartassurance/prod:/home/mohcineboudenjal/smartassurance/prod\" -w=\"/home/mohcineboudenjal/smartassurance/prod\" docker/compose:1.25.5 up'"
         }
     }
 }
