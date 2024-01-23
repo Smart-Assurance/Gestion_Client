@@ -6,27 +6,46 @@ pipeline {
         REMOTE_USER = 'mohcineboudenjal'
         REMOTE_HOST = 'production-server'
         REMOTE_PATH = '/home/mohcineboudenjal/smartassurance/prod'
+        JENKINS_HOME = '/var/lib/jenkins'
         JAR_NAME = 'microservice-client'  // Replace with your actual jar name
     }
 
     stages {
-        stage('Connect SSH to remote and create directory of jar file with dockerfile') {
-            steps {
-                script {
-                    // Connect to the production server using SSH
-                    sh """
-                        ssh -i ${JENKINS_SSH_KEY} -o StrictHostKeyChecking=no ${REMOTE_USER}@${REMOTE_HOST} '
-                            mkdir -p ${REMOTE_PATH}/${JAR_NAME} &&
-                            echo \"FROM openjdk:17-alpine\" > ${REMOTE_PATH}/${JAR_NAME}/Dockerfile &&
-                            echo \"ARG JAR_FILE=${JAR_NAME}-0.0.1-SNAPSHOT.jar\" >> ${REMOTE_PATH}/${JAR_NAME}/Dockerfile &&
-                            echo \"WORKDIR /opt/app\" >> ${REMOTE_PATH}/${JAR_NAME}/Dockerfile &&
-                            echo \"COPY ${JAR_NAME}-0.0.1-SNAPSHOT.jar app.jar\" >> ${REMOTE_PATH}/${JAR_NAME}/Dockerfile &&
-                            echo 'ENTRYPOINT ["java","-jar","app.jar"]' >> ${REMOTE_PATH}/${JAR_NAME}/Dockerfile
-                        '
-                    """
-                }
+    stage('Generate Dockerfile on Jenkins') {
+        steps {
+            script {
+                // Run the script to generate Dockerfile locally
+                sh """
+                    cd ${JENKINS_HOME}
+                    ./generate_dockerfile.sh ${JAR_NAME}
+                """
             }
         }
+    }
+
+    stage('Connect SSH to Remote and Create Directory') {
+        steps {
+            script {
+                // Connect to the remote server and create the directory
+                sh """
+                    ssh -i ${JENKINS_SSH_KEY} -o StrictHostKeyChecking=no ${REMOTE_USER}@${REMOTE_HOST} "
+                        mkdir -p ${REMOTE_PATH}/${JAR_NAME}
+                    "
+                """
+            }
+        }
+    }
+    
+    stage('Copy Dockerfile to Remote Server') {
+        steps {
+            script {
+                // Copy the generated Dockerfile to the remote server
+                sh "scp -i ${JENKINS_SSH_KEY} -o StrictHostKeyChecking=no ${JENKINS_HOME}/Dockerfile ${REMOTE_USER}@${REMOTE_HOST}:${REMOTE_PATH}/${JAR_NAME}/"
+            }
+        }
+    }
+
+
 
         stage('Build and Copy JAR file into directory') {
             steps {
@@ -39,20 +58,6 @@ pipeline {
                 }
             }
         }
-stage('reload docker images') {
-    steps {
-        script {
-            // Reconnect to SSH
-            sh "ssh -i ${JENKINS_SSH_KEY} -o StrictHostKeyChecking=no ${REMOTE_USER}@${REMOTE_HOST} 'cd ${REMOTE_PATH}'"
-
-            // Remove existing containers
-            sh "ssh -i ${JENKINS_SSH_KEY} -o StrictHostKeyChecking=no ${REMOTE_USER}@${REMOTE_HOST} 'cd ${REMOTE_PATH} && docker rm -f \$(docker ps -aq)'"
-
-            // Run Docker Compose
-            sh "ssh -i ${JENKINS_SSH_KEY} -o StrictHostKeyChecking=no ${REMOTE_USER}@${REMOTE_HOST} 'cd ${REMOTE_PATH} && docker run --rm -v /var/run/docker.sock:/var/run/docker.sock -v \"/home/mohcineboudenjal/smartassurance/prod:/home/mohcineboudenjal/smartassurance/prod\" -w=\"/home/mohcineboudenjal/smartassurance/prod\" docker/compose:1.25.5 up'"
-        }
-    }
-}
 // stage('reload docker images') {
 //     steps {
 //         script {
@@ -60,17 +65,12 @@ stage('reload docker images') {
 //             sh "ssh -i ${JENKINS_SSH_KEY} -o StrictHostKeyChecking=no ${REMOTE_USER}@${REMOTE_HOST} 'cd ${REMOTE_PATH}'"
 
 //             // Remove existing containers
-//             def containers = sh(script: 'docker ps -a -q', returnStdout: true).trim()
-//             if (containers) {
-//                 sh "docker rm $containers"
-//             }
+//             sh "ssh -i ${JENKINS_SSH_KEY} -o StrictHostKeyChecking=no ${REMOTE_USER}@${REMOTE_HOST} 'cd ${REMOTE_PATH} && docker rm -f \$(docker ps -aq)'"
 
 //             // Run Docker Compose
 //             sh "ssh -i ${JENKINS_SSH_KEY} -o StrictHostKeyChecking=no ${REMOTE_USER}@${REMOTE_HOST} 'cd ${REMOTE_PATH} && docker run --rm -v /var/run/docker.sock:/var/run/docker.sock -v \"/home/mohcineboudenjal/smartassurance/prod:/home/mohcineboudenjal/smartassurance/prod\" -w=\"/home/mohcineboudenjal/smartassurance/prod\" docker/compose:1.25.5 up'"
 //         }
 //     }
 // }
-
-
 }
 }
